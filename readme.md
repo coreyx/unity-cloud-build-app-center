@@ -29,7 +29,7 @@ required configuration in the URL query string.
 
   - `ownerName` - name of the owner of the App Center application
   - `appName` - name of the App Center application
-  - `team` - name of the team to distribute the app to on App Center
+  - `distributionGroup` - name of the distribution group to distribute the app to on App Center
   - `includeTargets` - comma-separated list of Unity Cloud Build targets that should be deployed to App Center, if not
       specified, all targets are used
 

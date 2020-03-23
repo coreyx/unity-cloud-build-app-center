@@ -109,7 +109,7 @@ app.post('/build', jsonParser, async function (req, res) {
 
     var { url, filename, notes } = await getBuildDetails(buildAPIURL);
     var downloadedFilename = await downloadBinary(url, filename);
-    await uploadToAppCenter(downloadedFilename, notes, req.body.platform, req.query.ownerName, req.query.appName, req.query.team);
+    await uploadToAppCenter(downloadedFilename, notes, req.body.platform, req.query.ownerName, req.query.appName, req.query.distributionGroup);
 });
 
 function getBuildDetails (buildAPIURL) {
@@ -190,12 +190,12 @@ function downloadBinary (binaryURL, filename) {
     );
 }
 
-async function uploadToAppCenter (filename, notes, platform, ownerName, appName, team) {
+async function uploadToAppCenter (filename, notes, platform, ownerName, appName, distributionGroup) {
     if (platform === 'android' || platform === 'ios') {
         var { uploadId, uploadUrl } = await createAppCenterUpload(ownerName, appName);
         await uploadFileToAppCenter(filename, uploadUrl);
         var releaseUrl = await commitAppCenterUpload(ownerName, appName, uploadId);
-        await distributeAppCenterUpload(releaseUrl, team, notes);
+        await distributeAppCenterUpload(releaseUrl, distributionGroup, notes);
     } else {
         logger.error('Platform not supported: %s', platform);
     }
@@ -213,6 +213,7 @@ function createAppCenterUpload (ownerName, appName) {
                 'X-API-Token': options.appCenterAPIKey,
                 'Content-Type': 'application/json'
             },
+            data: {},
             success: function (data) {
                 var parsedData = JSON.parse(data);
 
@@ -257,21 +258,28 @@ function commitAppCenterUpload (ownerName, appName, uploadId) {
     );
 }
 
-function distributeAppCenterUpload (releaseUrl, team, notes) {
+function distributeAppCenterUpload (releaseUrl, distributionGroup, notes) {
     logger.info('distributeAppCenterUpload: start');
     var url = `${options.appCenterHost}/${releaseUrl}`;
 
     var data = {
         release_notes: notes,
-        destination_name: team
+        destinations: 
+        [
+            {
+                name: distributionGroup
+            }
+        ]
     };
+
+    var body = JSON.stringify(data);
 
     return new Promise((resolve, reject) =>
         najax({
             url: url,
             type: 'PATCH',
             content_type: 'application/json',
-            data: data,
+            data: body,
             headers: {
                 'X-API-Token': options.appCenterAPIKey
             },
@@ -282,7 +290,7 @@ function distributeAppCenterUpload (releaseUrl, team, notes) {
                 resolve(parsedData.release_url);
             },
             error: function (error) {
-                logger.error('Error when committing upload: %j', error);
+                logger.error('Error when distributing release: %j', error);
                 reject(error);
             }
         })
@@ -305,7 +313,7 @@ function uploadFileToAppCenter (filename, uploadUrl) {
     return new Promise((resolve, reject) => {
         var req = form.submit({
             host: parsedUrl.host,
-            path: parsedUrl.pathname + parsedUrl.search,
+            path: parsedUrl.pathname, // + parsedUrl.search,
             protocol: parsedUrl.protocol,
             headers: {
                 'Accept': 'application/json',
@@ -319,6 +327,7 @@ function uploadFileToAppCenter (filename, uploadUrl) {
 
             if (res.statusCode !== 200 && res.statusCode !== 201 && res.statusCode !== 204) {
                 logger.info('Uploading failed with status ' + res.statusCode);
+                logger.info('parsedUrl ' + parsedUrl.host + parsedUrl.pathname + parsedUrl.search);
                 reject(err);
             }
 
